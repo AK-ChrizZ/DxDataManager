@@ -1,120 +1,99 @@
-DxDataManager
+# DxDataManager
 
-Deine Daten. Deine Kontrolle. Deine Privatsphäre.
+**Deine Daten. Deine Kontrolle. Deine Privatsphäre.**
 
-DxDataManager ist eine Windows-Desktop-Anwendung zur lokalen, verschlüsselten und übersichtlichen Verwaltung persönlicher Informationen. Mit verschlüsselter Datenspeicherung, PIN-geschütztem Zugriff, flexibler Profilverwaltung und einer modernen dunklen Benutzeroberfläche bietet DxDataManager eine einfache Möglichkeit, wichtige Informationen zentral an einem Ort zu verwalten.
+DxDataManager ist eine Windows-Desktop-Anwendung zur lokalen, sicheren und übersichtlichen Verwaltung persönlicher Informationen. Mit verschlüsselter Datenspeicherung, PIN-geschütztem Zugriff, flexibler Profilverwaltung und einer modernen dunklen Benutzeroberfläche bietet DxDataManager eine einfache Möglichkeit, wichtige Informationen zentral an einem Ort zu verwalten.
 
-Das Projekt umfasst zwei Versionen, die unterschiedliche Anforderungen erfüllen: eine klassisch installierbare Version und eine portable Version, die ohne herkömmliche Installation genutzt werden kann.
+Das Projekt bietet zwei Versionen für unterschiedliche Anforderungen: eine klassische Installationsversion und eine portable Version, die ohne herkömmliche Installation genutzt werden kann.
 
-Funktionen
+## Funktionen
 
-Verschlüsselte Datenspeicherung: Schützt gespeicherte Profildaten mithilfe der Fernet-Verschlüsselung.
+- **Verschlüsselte Datenspeicherung:** Schützt gespeicherte Profildaten mithilfe der Fernet-Verschlüsselung.
+- **PIN-geschützter Zugriff:** Greife über die integrierte PIN-Abfrage auf deine Profile zu.
+- **Profilverwaltung:** Erstelle und verwalte separate Profile.
+- **Kategorien:** Organisiere deine Informationen übersichtlich und effizient.
+- **Einträge bearbeiten:** Verwalte und aktualisiere bereits gespeicherte Informationen.
+- **Modernes Dark Design:** Eine dunkle Benutzeroberfläche mit orangefarbenen Akzenten.
+- **Lokale Speicherung:** Deine Profildaten werden lokal auf deinem Computer gespeichert.
+- **Zwei Versionen verfügbar:** Wähle zwischen der installierbaren und der portablen Version.
+- **Keine separate Python-Installation erforderlich:** Die veröffentlichten Windows-Versionen enthalten die benötigten Laufzeitabhängigkeiten.
 
-PIN-geschützter Zugriff: Greife über die integrierte PIN-Abfrage auf deine Profile zu.
+## Verfügbare Versionen
 
-Profilverwaltung: Erstelle und verwalte separate Profile.
+### 1. DxDataManager Installer
 
-Kategorien: Organisiere deine Informationen übersichtlich und strukturiert.
+Die Installationsversion ermöglicht eine unkomplizierte Einrichtung von DxDataManager unter Windows.
 
-Einträge bearbeiten: Verwalte und aktualisiere bereits gespeicherte Informationen.
+**Vorteile:**
 
-Modernes Dark Design: Eine dunkle Benutzeroberfläche mit orangefarbenen Akzenten.
+- Einfache Installation über eine Setup-Datei.
+- Installationsverzeichnis frei wählbar.
+- Optionale Desktopverknüpfung.
+- Verknüpfung im Windows-Startmenü.
+- Deinstallation über Windows möglich.
+- Profildaten werden getrennt von den Programmdateien gespeichert.
 
-Lokale Speicherung: Deine Profildaten werden lokal auf deinem Computer gespeichert.
+**Download:** Öffne den Bereich **Releases** und lade `DxDataManager_Setup.exe` herunter.
 
-Zwei Programmversionen: Wähle zwischen der installierbaren und der portablen Version.
-
-Keine separate Python-Installation erforderlich: Die veröffentlichten Windows-Versionen enthalten die benötigten Laufzeitabhängigkeiten.
-
-Verfügbare Versionen
-
-1. DxDataManager Installer
-
-Die installierbare Version ermöglicht eine unkomplizierte Einrichtung unter Windows.
-
-Vorteile:
-
-Einfache Installation über eine Setup-Datei.
-
-Installationsverzeichnis frei wählbar.
-
-Optionale Desktopverknüpfung.
-
-Verknüpfung im Windows-Startmenü.
-
-Deinstallation über Windows möglich.
-
-Profildaten werden getrennt von den Programmdateien gespeichert.
-
-Download: Öffne den Bereich Releases und lade DxDataManager_Setup.exe herunter.
-
-2. DxDataManager Portable
+### 2. DxDataManager Portable
 
 Die portable Version ermöglicht die Nutzung von DxDataManager ohne herkömmliche Installation.
 
-Vorteile:
+**Vorteile:**
 
-Kein Installationsassistent erforderlich.
+- Kein Installationsassistent erforderlich.
+- Direkt aus dem entpackten Programmordner startbar.
+- Programm und Profildaten können gemeinsam aufbewahrt werden.
+- Übertragung auf einen anderen Computer möglich.
+- Geeignet für die Nutzung von einem USB-Stick oder einem anderen Speichermedium.
 
-Direkt aus dem entpackten Programmordner startbar.
+**Verwendung:**
 
-Programm und Profildaten können gemeinsam aufbewahrt werden.
+1. Lade die portable Version aus dem Bereich **Releases** herunter.
+2. Entpacke das Archiv in einen Ordner deiner Wahl.
+3. Starte `DxDataManager.exe`.
 
-Übertragung auf einen anderen Computer möglich.
+Die Datei `portable.txt` muss sich neben der EXE befinden, damit das Programm den portablen Speicherort verwendet.
 
-Geeignet für die Nutzung von einem USB-Stick oder einem anderen Speichermedium.
-
-Verwendung:
-
-Lade die portable Version aus dem Bereich Releases herunter.
-
-Entpacke das Archiv in einen Ordner deiner Wahl.
-
-Starte DxDataManager.exe.
-
-Die Datei portable.txt muss sich neben der EXE befinden, damit das Programm den portablen Speicherort verwendet.
-
-Speicherort der Daten
+## Speicherort der Daten
 
 DxDataManager speichert deine Profildaten lokal. Der Speicherort hängt davon ab, welche Version du verwendest.
 
-Installierbare Version
+**Installationsversion**
 
 Standardmäßig werden die Profile hier gespeichert:
 
-%LOCALAPPDATA%\DxDataManager\profiles
+`%LOCALAPPDATA%\DxDataManager\profiles`
 
-Portable Version
+**Portable Version**
 
 Der Profilordner befindet sich direkt neben der Anwendung:
 
-DxDataManager\profiles
+`DxDataManager\profiles`
 
 Durch diese Trennung verwendet jede Version ihren vorgesehenen Speicherort.
 
-Datensicherung und Datenübertragung
+## Datensicherung und Datenübertragung
 
 Regelmäßige Sicherungskopien werden empfohlen, um Datenverlust zu vermeiden.
 
-So sicherst du deine Daten:
+**So sicherst du deine Daten:**
 
-Schließe DxDataManager.
+1. Schließe DxDataManager.
+2. Kopiere den Inhalt des jeweiligen `profiles`-Ordners an einen sicheren Speicherort.
+3. Bewahre die Sicherungskopie an einem geschützten Ort auf.
 
-Kopiere den Inhalt des jeweiligen profiles-Ordners an einen sicheren Speicherort.
-
-Bewahre die Sicherungskopie geschützt auf.
-
-Um deine Daten wiederherzustellen, kopiere die gesicherten Profildateien zurück in den entsprechenden profiles-Ordner.
+Um deine Daten wiederherzustellen, kopiere die gesicherten Profildateien zurück in den entsprechenden `profiles`-Ordner.
 
 Auch beim Wechsel zwischen der installierbaren und der portablen Version kannst du deine Profile manuell übertragen.
 
-Wichtig: Bewahre deine PIN sicher auf und erstelle regelmäßig Backups. Eine Sicherung ist besonders wichtig, bevor du Windows neu installierst, den Computer wechselst oder Änderungen an den Programmdateien vornimmst.
+**Wichtig:** Bewahre deine PIN sicher auf und erstelle regelmäßig Backups. Sicherungskopien sind besonders wichtig, bevor du Windows neu installierst, den Computer wechselst oder Änderungen an den Programmdateien vornimmst.
 
-Sicherheit
+## Sicherheit
 
 DxDataManager verwendet die Fernet-Verschlüsselung, um gespeicherte Profildaten zu schützen. Der Zugriff auf die Profile erfolgt über die integrierte PIN-Abfrage.
 
-Die Sicherheit hängt zusätzlich davon ab, dass du deine PIN schützt, deinen Computer absicherst und Sicherungskopien an einem sicheren Ort aufbewahrst. Die portable Nutzung allein schützt deine Daten nicht automatisch vor Verlust oder unbefugtem Zugriff.
+Die Sicherheit hängt zusätzlich davon ab, dass du deine PIN schützt, deinen Computer absicherst und Sicherungskopien an einem sicheren Ort aufbewahrst. Die Nutzung der portablen Version allein schützt deine Daten nicht automatisch vor Verlust oder unbefugtem Zugriff.
 
 ___________________________________________________________________________
 
