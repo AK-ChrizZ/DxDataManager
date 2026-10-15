@@ -1,0 +1,929 @@
+import os
+import sys
+import json
+import base64
+import tkinter as tk
+
+import customtkinter as ctk
+from tkinter import messagebox
+from PIL import Image
+from cryptography.fernet import Fernet, InvalidToken
+from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
+
+
+# ============================================================
+# KONFIGURATION
+# ============================================================
+
+ctk.set_appearance_mode("System")
+ctk.set_default_color_theme("blue")
+
+APP_NAME = "DxDataManager"
+APP_VERSION = "1.1"
+
+BASE_DIR = (
+    os.path.dirname(sys.executable)
+    if getattr(sys, "frozen", False)
+    else os.path.dirname(os.path.abspath(__file__))
+)
+
+PROFILE_DIR = os.path.join(BASE_DIR, "profiles")
+LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
+
+os.makedirs(PROFILE_DIR, exist_ok=True)
+
+FILE_MAGIC = b"DXDM1"
+SALT_LENGTH = 16
+
+
+# ============================================================
+# VERSCHLÜSSELUNG
+# ============================================================
+
+def get_crypto_key(pin: str, salt: bytes) -> bytes:
+    """Leitet mit Scrypt einen Fernet-Schlüssel aus der PIN ab."""
+
+    derived_key = Scrypt(
+        salt=salt,
+        length=32,
+        n=2**14,
+        r=8,
+        p=1
+    ).derive(pin.encode("utf-8"))
+
+    return base64.urlsafe_b64encode(derived_key)
+
+
+def get_profile_path(name: str) -> str:
+    """Erzeugt einen Dateipfad für einen validierten Profilnamen."""
+
+    if not name or name in (".", ".."):
+        raise ValueError("Ungültiger Profilname.")
+
+    if len(name) > 60:
+        raise ValueError("Der Profilname darf maximal 60 Zeichen haben.")
+
+    if not all(
+        char.isalnum() or char in " _.-"
+        for char in name
+    ):
+        raise ValueError(
+            "Erlaubt sind Buchstaben, Zahlen, Leerzeichen, "
+            "Punkte, Bindestriche und Unterstriche."
+        )
+
+    return os.path.join(PROFILE_DIR, f"{name}.dat")
+
+
+def save_profile_data(name: str, pin: str, data: dict):
+    """Verschlüsselt die Profildaten und speichert sie."""
+
+    if not pin:
+        raise ValueError("Die PIN darf nicht leer sein.")
+
+    path = get_profile_path(name)
+    salt = os.urandom(SALT_LENGTH)
+
+    key = get_crypto_key(pin, salt)
+    encrypted = Fernet(key).encrypt(
+        json.dumps(
+            data,
+            ensure_ascii=False
+        ).encode("utf-8")
+    )
+
+    # Erst eine temporäre Datei schreiben und danach ersetzen.
+    temp_path = path + ".tmp"
+
+    try:
+        with open(temp_path, "wb") as file:
+            file.write(FILE_MAGIC + salt + encrypted)
+            file.flush()
+            os.fsync(file.fileno())
+
+        os.replace(temp_path, path)
+
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+
+def load_profile_data(name: str, pin: str):
+    """Entschlüsselt ein Profil. Bei Fehlern wird None zurückgegeben."""
+
+    try:
+        path = get_profile_path(name)
+
+        with open(path, "rb") as file:
+            raw = file.read()
+
+        # Nur das neue Dateiformat akzeptieren.
+        if not raw.startswith(FILE_MAGIC):
+            return None
+
+        offset = len(FILE_MAGIC)
+
+        salt = raw[offset:offset + SALT_LENGTH]
+        encrypted = raw[offset + SALT_LENGTH:]
+
+        if len(salt) != SALT_LENGTH or not encrypted:
+            return None
+
+        key = get_crypto_key(pin, salt)
+
+        decrypted = Fernet(key).decrypt(encrypted)
+        data = json.loads(decrypted.decode("utf-8"))
+
+        if not isinstance(data, dict):
+            return None
+
+        if not isinstance(data.get("categories"), dict):
+            return None
+
+        return data
+
+    except (
+        OSError,
+        ValueError,
+        TypeError,
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+        InvalidToken
+    ):
+        return None
+
+
+# ============================================================
+# HAUPTPROGRAMM
+# ============================================================
+
+class DxDataManager(ctk.CTk):
+
+    def __init__(self):
+        super().__init__()
+
+        self.title(f"{APP_NAME} v{APP_VERSION}")
+        self.geometry("750x750")
+        self.minsize(600, 600)
+
+        self.current_profile = None
+        self.current_pin = None
+        self.app_icon = None
+
+        # Windows-Fenstericon und Bildressource.
+        if os.path.exists(LOGO_PATH):
+            try:
+                self.app_icon = tk.PhotoImage(file=LOGO_PATH)
+                self.iconphoto(False, self.app_icon)
+            except tk.TclError:
+                self.app_icon = None
+
+        self.main_container = ctk.CTkFrame(
+            self,
+            fg_color="transparent"
+        )
+        self.main_container.pack(
+            fill="both",
+            expand=True,
+            padx=20,
+            pady=20
+        )
+
+        self.show_welcome_screen()
+
+    # --------------------------------------------------------
+    # ALLGEMEINE HILFSFUNKTIONEN
+    # --------------------------------------------------------
+
+    def clear(self):
+        for widget in self.main_container.winfo_children():
+            widget.destroy()
+
+    def show_back_button(self, command=None):
+        ctk.CTkButton(
+            self.main_container,
+            text="Zurück",
+            fg_color="gray",
+            command=command or self.show_profile_overview
+        ).pack(pady=10)
+
+    # --------------------------------------------------------
+    # STARTBILDSCHIRM
+    # --------------------------------------------------------
+
+    def show_welcome_screen(self):
+        self.clear()
+
+        if os.path.exists(LOGO_PATH):
+            try:
+                image = ctk.CTkImage(
+                    light_image=Image.open(LOGO_PATH),
+                    dark_image=Image.open(LOGO_PATH),
+                    size=(150, 150)
+                )
+
+                ctk.CTkLabel(
+                    self.main_container,
+                    image=image,
+                    text=""
+                ).pack(pady=(70, 20))
+
+                self.welcome_image = image
+
+            except (OSError, ValueError):
+                pass
+
+        ctk.CTkLabel(
+            self.main_container,
+            text=APP_NAME,
+            font=("Arial", 30, "bold")
+        ).pack(pady=10)
+
+        ctk.CTkLabel(
+            self.main_container,
+            text="Ihr sicherer Daten-Tresor",
+            font=("Arial", 16),
+            text_color="gray"
+        ).pack(pady=5)
+
+        self.after(1800, self.show_profile_overview)
+
+    # --------------------------------------------------------
+    # PROFILÜBERSICHT
+    # --------------------------------------------------------
+
+    def show_profile_overview(self):
+        self.clear()
+
+        self.current_profile = None
+        self.current_pin = None
+
+        ctk.CTkLabel(
+            self.main_container,
+            text="Deine Profile",
+            font=("Arial", 24, "bold")
+        ).pack(pady=15)
+
+        scroll = ctk.CTkScrollableFrame(
+            self.main_container,
+            height=480
+        )
+        scroll.pack(
+            fill="both",
+            expand=True,
+            padx=10,
+            pady=10
+        )
+
+        profiles = sorted(
+            f[:-4]
+            for f in os.listdir(PROFILE_DIR)
+            if f.endswith(".dat")
+        )
+
+        if not profiles:
+            ctk.CTkLabel(
+                scroll,
+                text="Noch keine Profile vorhanden.",
+                text_color="gray"
+            ).pack(pady=30)
+
+        for profile in profiles:
+            row = ctk.CTkFrame(
+                scroll,
+                corner_radius=10
+            )
+            row.pack(fill="x", pady=6, padx=5)
+
+            ctk.CTkButton(
+                row,
+                text=profile,
+                anchor="w",
+                font=("Arial", 15),
+                command=lambda n=profile: self.ask_pin(n, "open")
+            ).pack(
+                side="left",
+                fill="x",
+                expand=True,
+                padx=8,
+                pady=8
+            )
+
+            ctk.CTkButton(
+                row,
+                text="Bearbeiten",
+                width=100,
+                fg_color="#4B5563",
+                command=lambda n=profile: self.ask_pin(n, "edit")
+            ).pack(side="left", padx=5, pady=8)
+
+            ctk.CTkButton(
+                row,
+                text="Löschen",
+                width=80,
+                fg_color="#991B1B",
+                hover_color="#7F1D1D",
+                command=lambda n=profile: self.confirm_delete(n)
+            ).pack(side="left", padx=(0, 8), pady=8)
+
+        ctk.CTkButton(
+            self.main_container,
+            text="+ Neues Profil erstellen",
+            font=("Arial", 16, "bold"),
+            height=45,
+            command=self.show_create_profile
+        ).pack(fill="x", pady=10)
+
+    # --------------------------------------------------------
+    # PROFIL ERSTELLEN
+    # --------------------------------------------------------
+
+    def show_create_profile(self):
+        self.clear()
+
+        ctk.CTkLabel(
+            self.main_container,
+            text="Neues Profil erstellen",
+            font=("Arial", 23, "bold")
+        ).pack(pady=25)
+
+        name_entry = ctk.CTkEntry(
+            self.main_container,
+            placeholder_text="Name des Profils",
+            width=300
+        )
+        name_entry.pack(pady=10)
+
+        pin_entry = ctk.CTkEntry(
+            self.main_container,
+            placeholder_text="Neue PIN",
+            show="*",
+            width=300
+        )
+        pin_entry.pack(pady=10)
+
+        ctk.CTkLabel(
+            self.main_container,
+            text=(
+                "Merke dir deine PIN. Ohne sie können deine "
+                "Daten nicht entschlüsselt werden."
+            ),
+            text_color="orange",
+            wraplength=450
+        ).pack(pady=10)
+
+        error_label = ctk.CTkLabel(
+            self.main_container,
+            text="",
+            text_color="red",
+            wraplength=450
+        )
+        error_label.pack(pady=5)
+
+        def create():
+            name = name_entry.get().strip()
+            pin = pin_entry.get()
+
+            if not name or not pin:
+                error_label.configure(
+                    text="Bitte Profilnamen und PIN eingeben."
+                )
+                return
+
+            try:
+                path = get_profile_path(name)
+            except ValueError as exc:
+                error_label.configure(text=str(exc))
+                return
+
+            if os.path.exists(path):
+                error_label.configure(
+                    text="Dieses Profil existiert bereits."
+                )
+                return
+
+            data = {"categories": {}}
+
+            try:
+                save_profile_data(name, pin, data)
+            except (OSError, ValueError) as exc:
+                messagebox.showerror(
+                    "Fehler",
+                    f"Das Profil konnte nicht gespeichert werden:\n{exc}"
+                )
+                return
+
+            self.current_profile = name
+            self.current_pin = pin
+            self.show_edit(data)
+
+        ctk.CTkButton(
+            self.main_container,
+            text="Profil erstellen",
+            command=create
+        ).pack(pady=15)
+
+        self.show_back_button()
+
+    # --------------------------------------------------------
+    # PIN ABFRAGEN
+    # --------------------------------------------------------
+
+    def ask_pin(self, name, mode="open"):
+        self.clear()
+
+        ctk.CTkLabel(
+            self.main_container,
+            text=f"Profil: {name}",
+            font=("Arial", 23, "bold")
+        ).pack(pady=25)
+
+        entry = ctk.CTkEntry(
+            self.main_container,
+            placeholder_text="PIN eingeben",
+            show="*",
+            width=250,
+            justify="center"
+        )
+        entry.pack(pady=10)
+        entry.focus_set()
+
+        error_label = ctk.CTkLabel(
+            self.main_container,
+            text="",
+            text_color="red"
+        )
+        error_label.pack(pady=5)
+
+        def check():
+            pin = entry.get()
+
+            data = load_profile_data(name, pin)
+
+            if data is None:
+                error_label.configure(
+                    text="PIN falsch oder Profildatei ungültig."
+                )
+                return
+
+            self.current_profile = name
+            self.current_pin = pin
+
+            if mode == "open":
+                self.show_vault(data)
+            else:
+                self.show_edit(data)
+
+        entry.bind("<Return>", lambda event: check())
+
+        ctk.CTkButton(
+            self.main_container,
+            text="Freischalten",
+            command=check
+        ).pack(pady=15)
+
+        self.show_back_button()
+
+    # --------------------------------------------------------
+    # DATEN ANZEIGEN
+    # --------------------------------------------------------
+
+    def show_vault(self, data):
+        self.clear()
+
+        ctk.CTkLabel(
+            self.main_container,
+            text=f"Willkommen, {self.current_profile}",
+            font=("Arial", 23, "bold")
+        ).pack(pady=15)
+
+        scroll = ctk.CTkScrollableFrame(self.main_container)
+        scroll.pack(fill="both", expand=True, pady=10)
+
+        categories = data.get("categories", {})
+
+        if not categories:
+            ctk.CTkLabel(
+                scroll,
+                text="Dieses Profil enthält noch keine Daten.",
+                text_color="gray"
+            ).pack(pady=30)
+
+        for category_name, blocks in categories.items():
+            category_frame = ctk.CTkFrame(
+                scroll,
+                corner_radius=8
+            )
+            category_frame.pack(
+                fill="x",
+                pady=8,
+                padx=5
+            )
+
+            ctk.CTkLabel(
+                category_frame,
+                text=category_name,
+                font=("Arial", 17, "bold"),
+                text_color="orange"
+            ).pack(anchor="w", padx=12, pady=8)
+
+            for block in blocks:
+                block_frame = ctk.CTkFrame(
+                    category_frame,
+                    fg_color=("gray90", "#292929"),
+                    corner_radius=6
+                )
+                block_frame.pack(
+                    fill="x",
+                    padx=10,
+                    pady=5
+                )
+
+                for value in block:
+                    ctk.CTkLabel(
+                        block_frame,
+                        text=str(value),
+                        anchor="w",
+                        justify="left",
+                        wraplength=580
+                    ).pack(
+                        fill="x",
+                        padx=12,
+                        pady=5
+                    )
+
+        ctk.CTkButton(
+            self.main_container,
+            text="Abmelden",
+            fg_color="gray",
+            command=self.show_profile_overview
+        ).pack(fill="x", pady=10)
+
+    # --------------------------------------------------------
+    # PROFIL BEARBEITEN
+    # --------------------------------------------------------
+
+    def show_edit(self, data):
+        self.clear()
+
+        ctk.CTkLabel(
+            self.main_container,
+            text=f"Profil bearbeiten: {self.current_profile}",
+            font=("Arial", 21, "bold")
+        ).pack(pady=10)
+
+        # PIN-Eingabe
+        pin_frame = ctk.CTkFrame(
+            self.main_container,
+            fg_color="transparent"
+        )
+        pin_frame.pack(fill="x", pady=5)
+
+        ctk.CTkLabel(
+            pin_frame,
+            text="Neue PIN:"
+        ).pack(side="left", padx=5)
+
+        pin_entry = ctk.CTkEntry(
+            pin_frame,
+            show="*",
+            width=200
+        )
+        pin_entry.insert(0, self.current_pin)
+        pin_entry.pack(side="left", padx=5)
+
+        # Datenmodell prüfen
+        categories = data.setdefault("categories", {})
+
+        if not isinstance(categories, dict):
+            categories = {}
+            data["categories"] = categories
+
+        scroll = ctk.CTkScrollableFrame(self.main_container)
+        scroll.pack(fill="both", expand=True, pady=10)
+
+        ui = {}
+
+        def save_ui():
+            """Übernimmt alle aktuell sichtbaren Eingaben ins Datenmodell."""
+
+            for category_name, block_entries in ui.items():
+                if category_name not in categories:
+                    continue
+
+                for block_index, field_entries in enumerate(block_entries):
+                    if block_index >= len(categories[category_name]):
+                        continue
+
+                    categories[category_name][block_index] = [
+                        entry.get()
+                        for entry in field_entries
+                    ]
+
+        def render():
+            """Baut die Bearbeitungsansicht vollständig neu auf."""
+
+            for widget in scroll.winfo_children():
+                widget.destroy()
+
+            ui.clear()
+
+            for category_name, blocks in list(categories.items()):
+                category_frame = ctk.CTkFrame(
+                    scroll,
+                    border_width=1,
+                    border_color="orange",
+                    corner_radius=8
+                )
+                category_frame.pack(
+                    fill="x",
+                    pady=8,
+                    padx=5
+                )
+
+                header = ctk.CTkFrame(
+                    category_frame,
+                    fg_color="transparent"
+                )
+                header.pack(fill="x", padx=8, pady=5)
+
+                ctk.CTkLabel(
+                    header,
+                    text=category_name,
+                    font=("Arial", 15, "bold"),
+                    text_color="orange"
+                ).pack(side="left", padx=5)
+
+                ctk.CTkButton(
+                    header,
+                    text="Kategorie löschen",
+                    width=130,
+                    height=28,
+                    fg_color="#991B1B",
+                    command=lambda c=category_name: delete_category(c)
+                ).pack(side="right", padx=5)
+
+                ui[category_name] = []
+
+                for block_index, block in enumerate(blocks):
+                    block_frame = ctk.CTkFrame(
+                        category_frame,
+                        fg_color=("gray90", "#303030"),
+                        corner_radius=6
+                    )
+                    block_frame.pack(
+                        fill="x",
+                        padx=8,
+                        pady=5
+                    )
+
+                    field_entries = []
+
+                    for value in block:
+                        entry = ctk.CTkEntry(block_frame)
+                        entry.insert(0, str(value))
+                        entry.pack(
+                            fill="x",
+                            padx=10,
+                            pady=3
+                        )
+                        field_entries.append(entry)
+
+                    ui[category_name].append(field_entries)
+
+                    buttons = ctk.CTkFrame(
+                        block_frame,
+                        fg_color="transparent"
+                    )
+                    buttons.pack(fill="x", padx=8, pady=5)
+
+                    ctk.CTkButton(
+                        buttons,
+                        text="+ Datenfeld",
+                        width=110,
+                        command=lambda c=category_name, b=block_index: add_field(c, b)
+                    ).pack(side="left", padx=3)
+
+                    ctk.CTkButton(
+                        buttons,
+                        text="Datenblock löschen",
+                        width=150,
+                        fg_color="#991B1B",
+                        command=lambda c=category_name, b=block_index: delete_block(c, b)
+                    ).pack(side="left", padx=3)
+
+                ctk.CTkButton(
+                    category_frame,
+                    text="+ Neuer Datenblock",
+                    fg_color="#4B5563",
+                    command=lambda c=category_name: add_block(c)
+                ).pack(fill="x", padx=8, pady=8)
+
+        def add_field(category_name, block_index):
+            save_ui()
+            categories[category_name][block_index].append("")
+            render()
+
+        def add_block(category_name):
+            save_ui()
+            categories[category_name].append([""])
+            render()
+
+        def delete_block(category_name, block_index):
+            if not messagebox.askyesno(
+                "Datenblock löschen",
+                "Möchtest du diesen Datenblock wirklich löschen?"
+            ):
+                return
+
+            save_ui()
+            del categories[category_name][block_index]
+            render()
+
+        def delete_category(category_name):
+            if not messagebox.askyesno(
+                "Kategorie löschen",
+                f"Möchtest du die Kategorie '{category_name}' "
+                "mit allen enthaltenen Daten löschen?"
+            ):
+                return
+
+            save_ui()
+            del categories[category_name]
+            render()
+
+        def add_category():
+            save_ui()
+
+            dialog = ctk.CTkInputDialog(
+                text="Name der neuen Kategorie:",
+                title="Kategorie erstellen"
+            )
+
+            value = dialog.get_input()
+
+            if value is None:
+                return
+
+            value = value.strip()
+
+            if not value:
+                messagebox.showwarning(
+                    "Ungültiger Name",
+                    "Der Kategoriename darf nicht leer sein."
+                )
+                return
+
+            if value in categories:
+                messagebox.showwarning(
+                    "Bereits vorhanden",
+                    "Diese Kategorie existiert bereits."
+                )
+                return
+
+            categories[value] = [[""]]
+            render()
+
+        def save_and_exit():
+            save_ui()
+
+            new_pin = pin_entry.get()
+
+            if not new_pin:
+                messagebox.showerror(
+                    "Ungültige PIN",
+                    "Die PIN darf nicht leer sein."
+                )
+                return
+
+            # Leere Felder entfernen, aber Datenblöcke sauber behandeln.
+            cleaned = {}
+
+            for category_name, blocks in categories.items():
+                cleaned_blocks = []
+
+                for block in blocks:
+                    cleaned_fields = [
+                        value.strip()
+                        for value in block
+                        if value.strip()
+                    ]
+
+                    if cleaned_fields:
+                        cleaned_blocks.append(cleaned_fields)
+
+                if cleaned_blocks:
+                    cleaned[category_name] = cleaned_blocks
+
+            new_data = {"categories": cleaned}
+
+            try:
+                save_profile_data(
+                    self.current_profile,
+                    new_pin,
+                    new_data
+                )
+
+            except (OSError, ValueError) as exc:
+                messagebox.showerror(
+                    "Speicherfehler",
+                    f"Die Daten konnten nicht gespeichert werden:\n{exc}"
+                )
+                return
+
+            self.current_pin = new_pin
+
+            messagebox.showinfo(
+                "Gespeichert",
+                "Deine Daten wurden verschlüsselt gespeichert."
+            )
+
+            self.show_profile_overview()
+
+        # Diese Schaltflächen gehören in show_edit(), nicht
+        # in save_and_exit()!
+        ctk.CTkButton(
+            self.main_container,
+            text="+ Kategorie erstellen",
+            fg_color="green",
+            command=add_category
+        ).pack(fill="x", pady=5)
+
+        render()
+
+        button_frame = ctk.CTkFrame(
+            self.main_container,
+            fg_color="transparent"
+        )
+        button_frame.pack(fill="x", pady=10)
+
+        ctk.CTkButton(
+            button_frame,
+            text="Änderungen speichern",
+            command=save_and_exit
+        ).pack(side="right", padx=5)
+
+        ctk.CTkButton(
+            button_frame,
+            text="Abbrechen",
+            fg_color="gray",
+            command=self.show_profile_overview
+        ).pack(side="left", padx=5)
+
+    # --------------------------------------------------------
+    # PROFIL LÖSCHEN
+    # --------------------------------------------------------
+
+    def confirm_delete(self, name):
+        try:
+            path = get_profile_path(name)
+        except ValueError as exc:
+            messagebox.showerror("Fehler", str(exc))
+            return
+
+        if not os.path.isfile(path):
+            messagebox.showerror(
+                "Nicht gefunden",
+                "Die Profildatei existiert nicht mehr."
+            )
+            self.show_profile_overview()
+            return
+
+        confirmed = messagebox.askyesno(
+            "Profil löschen",
+            f"Möchtest du das Profil '{name}' wirklich löschen?\n\n"
+            "Diese Aktion kann nicht rückgängig gemacht werden."
+        )
+
+        if not confirmed:
+            return
+
+        try:
+            os.remove(path)
+
+        except OSError as exc:
+            messagebox.showerror(
+                "Löschen fehlgeschlagen",
+                f"Das Profil konnte nicht gelöscht werden:\n{exc}"
+            )
+            return
+
+        if self.current_profile == name:
+            self.current_profile = None
+            self.current_pin = None
+
+        messagebox.showinfo(
+            "Profil gelöscht",
+            f"Das Profil '{name}' wurde gelöscht."
+        )
+
+        self.show_profile_overview()
+
+
+# ============================================================
+# PROGRAMMSTART
+# ============================================================
+
+if __name__ == "__main__":
+    app = DxDataManager()
+    app.mainloop()
